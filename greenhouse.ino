@@ -11,6 +11,9 @@
 #define DHTPIN D0
 #define DHTTYPE DHT22
 
+#define INTERRUPT_PIN D4
+#define FLOW_METER_PERIOD 10000
+#define FLOW_METER_DURATION 2000
 
 #define SDA D2
 #define SCL D1
@@ -27,6 +30,11 @@ DallasTemperature sensors(&oneWire);
   VEML6075 uv = VEML6075();
 #endif
 
+volatile byte pulseCounter = 0;;
+int oldTime = 0;
+float flowRate = 0.0;
+const float cal_factor = 4.5;
+
 void setup() {
   Serial.begin(9600);
   dht.begin();
@@ -36,6 +44,8 @@ void setup() {
     uv.begin();
   #endif
   sensors.begin();
+
+  pinMode(INTERRUPT_PIN, INPUT);
 }
 
 void loop() {
@@ -48,6 +58,16 @@ void loop() {
     lightFromVEM();
   #endif
   dallasTemp();
+  if (millis() - oldTime > FLOW_METER_PERIOD) {
+    oldTime = millis();
+    do {
+      attachInterrupt(INTERRUPT_PIN, pulseCount, FALLING);
+    } while (millis() - oldTime < FLOW_METER_DURATION);
+    detachInterrupt(INTERRUPT_PIN);
+    flowRate = (1000.0 / (millis() - oldTime)) * pulseCounter / cal_factor;
+    oldTime = millis();
+    showFlow(flowRate);
+  }
 }
 
 void humidity() {
@@ -101,4 +121,17 @@ void lightFromVEM() {
     Serial.print('UVB: ');
     Serial.println(uvb);
    #endif
+}
+
+void pulseCount () {
+  pulseCounter++;
+}
+
+void showFlow(float f) {
+  if (!isnan(f)) {
+    return;
+  }
+  Serial.print('Flow rate: ');
+  Serial.println(f);
+  Serial.println(' mL/min');
 }
